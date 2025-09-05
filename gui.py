@@ -1,34 +1,28 @@
 # gui.py
 # ===== Section 0: Imports & setup =====
 import os
-import torch, torch.nn as nn, torch.nn.functional as F
-from torchvision import transforms
-from PIL import Image, ImageOps, ImageStat, ImageTk
-
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
+import torch
+import torch.nn.functional as F
+from torchvision import transforms
+from PIL import Image, ImageOps, ImageStat, ImageTk
+
+# Import ALL models you may want to use, then pick one + matching weights
+from models import Net, NetCNN, NetCNNPlus
+
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-WEIGHTS_PATH = "mnist_mlp.pt"   # ensure this matches the filename you saved in main.py
+MODEL_CLASS = NetCNNPlus                # <-- choose the same class you trained
+WEIGHTS_PATH = "best_cnnplus.pt"        # <-- choose the matching checkpoint
 
-# ===== Section 1: Model (same MLP as main.py) =====
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.fc1 = nn.Linear(28*28, 128)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 10)
-    def forward(self, x):
-        x = x.view(-1, 28*28)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)  # logits
+# ===== Section 1: Inference preprocessing (MUST match training stats) =====
+MNIST_MEAN, MNIST_STD = (0.1307,), (0.3081,)
 
-# ===== Section 2: Inference preprocessing =====
 infer_transform = transforms.Compose([
     transforms.Resize((28, 28)),
     transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,))
+    transforms.Normalize(MNIST_MEAN, MNIST_STD),
 ])
 
 def prepare_uploaded_image(path: str):
@@ -36,11 +30,12 @@ def prepare_uploaded_image(path: str):
     Return (tensor_for_model, processed_PIL_for_preview).
     """
     img = Image.open(path).convert("L")
-    stat = ImageStat.Stat(img)
-    if stat.mean[0] > 127:
+    # If the background is bright (paper), invert to make digit bright-on-dark like MNIST
+    if ImageStat.Stat(img).mean[0] > 127:
         img = ImageOps.invert(img)
     img = ImageOps.autocontrast(img)
 
+    # Center-pad to square, then apply the same normalization as training
     w, h = img.size
     side = max(w, h)
     canvas = Image.new("L", (side, side), color=0)
@@ -49,18 +44,22 @@ def prepare_uploaded_image(path: str):
     x = infer_transform(canvas).unsqueeze(0).to(DEVICE)  # [1,1,28,28]
     return x, canvas
 
-# ===== Section 3: Load weights =====
+# ===== Section 2: Load weights for the selected class =====
 def load_model():
-    model = Net().to(DEVICE)
+    """
+    Instantiate the *same* class you trained (MODEL_CLASS) and load its weights.
+    """
     if not os.path.exists(WEIGHTS_PATH):
         raise FileNotFoundError(
-            f"Missing weights '{WEIGHTS_PATH}'. Train and save via main.py, or change WEIGHTS_PATH."
+            f"Missing weights '{WEIGHTS_PATH}'. Train with main.py or update WEIGHTS_PATH."
         )
-    model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=DEVICE))
+    model = MODEL_CLASS().to(DEVICE)
+    state = torch.load(WEIGHTS_PATH, map_location=DEVICE)
+    model.load_state_dict(state, strict=True)
     model.eval()
     return model
 
-# ===== Section 4: Tkinter App =====
+# ===== Section 3: Tkinter App =====
 class App:
     def __init__(self, root):
         self.root = root
@@ -115,9 +114,7 @@ class App:
                 probs = torch.softmax(logits, dim=1)[0]
                 pred = int(probs.argmax().item())
             top = torch.topk(probs, k=3)
-            top_classes = [int(i) for i in top.indices.tolist()]
-            top_probs = [float(p) for p in top.values.tolist()]
-            top_str = ", ".join(f"{c}: {p:.3f}" for c, p in zip(top_classes, top_probs))
+            top_str = ", ".join(f"{int(i)}: {float(p):.3f}" for i, p in zip(top.indices, top.values))
             self.pred_label.config(text=f"Prediction: {pred}\nTop-3: {top_str}")
         except Exception as e:
             messagebox.showerror("Error", f"Inference failed:\n{e}")

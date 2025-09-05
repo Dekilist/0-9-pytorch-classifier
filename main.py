@@ -12,7 +12,9 @@ import numpy as np
 # -------------------- Args & device --------------------
 def get_args():
     ap = argparse.ArgumentParser(description="MNIST: train precise model and/or predict a photo")
-    ap.add_argument("--model", type=str, default="mlp", choices=["mlp", "mlp+", "cnn"], help="which model to train")
+    ap.add_argument("--model", type=str, default="mlp",
+                    choices=["mlp", "mlp+", "cnn", "cnn+"],
+                    help="which model to train")
     ap.add_argument("--epochs", type=int, default=25)
     ap.add_argument("--batch_size", type=int, default=128)
     ap.add_argument("--test_batch_size", type=int, default=512)
