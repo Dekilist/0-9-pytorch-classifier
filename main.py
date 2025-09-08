@@ -13,7 +13,7 @@ import numpy as np
 def get_args():
     ap = argparse.ArgumentParser(description="MNIST: train precise model and/or predict a photo")
     ap.add_argument("--model", type=str, default="mlp",
-                    choices=["mlp", "mlp+", "cnn", "cnn+"],
+                    choices=["mlp", "mlp+", "cnn", "cnn+", "cnn++"],
                     help="which model to train")
     ap.add_argument("--epochs", type=int, default=25)
     ap.add_argument("--batch_size", type=int, default=128)
@@ -36,10 +36,12 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MNIST_MEAN, MNIST_STD = (0.1307,), (0.3081,)
 
 train_transform = transforms.Compose([
-    transforms.RandomAffine(degrees=10, translate=(0.05, 0.05), scale=(0.95, 1.05)),
+    transforms.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10),
+    transforms.RandomPerspective(distortion_scale=0.2, p=0.3),
     transforms.ToTensor(),
     transforms.Normalize(MNIST_MEAN, MNIST_STD),
 ])
+
 
 test_transform = transforms.Compose([
     transforms.ToTensor(),

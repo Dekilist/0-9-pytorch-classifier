@@ -10,11 +10,12 @@ from torchvision import transforms
 from PIL import Image, ImageOps, ImageStat, ImageTk
 
 # Import ALL models you may want to use, then pick one + matching weights
-from models import Net, NetCNN, NetCNNPlus
+from models import Net, NetCNN, NetCNNPlus, NetCNNDeep
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-MODEL_CLASS = NetCNNPlus                # <-- choose the same class you trained
-WEIGHTS_PATH = "best_cnnplus.pt"        # <-- choose the matching checkpoint
+MODEL_CLASS = NetCNNDeep
+WEIGHTS_PATH = "best_cnnpp.pt"
+        # <-- choose the matching checkpoint
 
 # ===== Section 1: Inference preprocessing (MUST match training stats) =====
 MNIST_MEAN, MNIST_STD = (0.1307,), (0.3081,)
@@ -79,7 +80,7 @@ class App:
         self.upload_btn = tk.Button(root, text="Upload Picture", command=self.on_upload)
         self.upload_btn.pack(pady=6)
 
-        self.preview_label = tk.Label(root, text="No image loaded", bd=1, relief="sunken", width=28, height=14)
+        self.preview_label = tk.Label(root, text="No image loaded", bd=1, relief="sunken")
         self.preview_label.pack(pady=8)
 
         self.pred_label = tk.Label(root, text="Prediction: -\nTop-3: -", font=("Consolas", 12))
@@ -120,9 +121,10 @@ class App:
             messagebox.showerror("Error", f"Inference failed:\n{e}")
             return
 
-        preview = canvas_img.resize((224, 224), Image.NEAREST)
+        preview = canvas_img.resize((320, 320), Image.Resampling.LANCZOS)  # or 360, 400, etc.
         self.tk_img = ImageTk.PhotoImage(preview)
         self.preview_label.configure(image=self.tk_img, text="")
+        self.preview_label.image = self.tk_img  # extra safety: keep a widget-level reference
 
 def main():
     root = tk.Tk()

@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ["Net", "NetMLPPlus", "NetCNN", "NetCNNPlus", "create_model", "count_parameters"]
+__all__ = ["Net", "NetMLPPlus", "NetCNN", "NetCNNPlus", "NetCNNDeep", "create_model", "count_parameters"]
 
 
 class Net(nn.Module):
@@ -97,18 +97,66 @@ class NetCNNPlus(nn.Module):
         x = self.drop(F.relu(self.fc1(x)))
         return self.fc2(x)  # logits
 
+class NetCNNDeep(nn.Module):
+    """
+    Deeper CNN (3 blocks):
+      block1: 1->32, 28->14
+      block2: 32->64, 14->7
+      block3: 64->128, 7->3
+      Flatten -> Dropout -> FC(128*3*3, 256) -> ReLU -> FC(256, 10)
+    """
+    def __init__(self, p_drop=0.3):
+        super().__init__()
+        self.block1 = nn.Sequential(
+            nn.Conv2d(1, 32, 3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 32, 3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),  # 28 -> 14
+        )
+        self.block2 = nn.Sequential(
+            nn.Conv2d(32, 64, 3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),  # 14 -> 7
+        )
+        self.block3 = nn.Sequential(
+            nn.Conv2d(64, 128, 3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),  # 7 -> 3
+        )
+        self.drop = nn.Dropout(p_drop)
+        self.fc1 = nn.Linear(128 * 3 * 3, 256)   # <-- correct input size for 3rd block
+        self.fc2 = nn.Linear(256, 10)
 
-def create_model(name: Literal["mlp", "mlp+", "cnn", "cnn+"] = "mlp") -> nn.Module:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)                  # <-- actually use block3
+        x = x.view(x.size(0), -1)
+        x = self.drop(F.relu(self.fc1(x)))
+        return self.fc2(x)
+
+
+def create_model(name: Literal["mlp","mlp+","cnn","cnn+","cnn++"] = "mlp") -> nn.Module:
     name = name.lower()
     if name == "mlp":
         return Net()
-    if name in ("mlp+", "mlpplus", "mlp_plus"):
+    if name in ("mlp+","mlpplus","mlp_plus"):
         return NetMLPPlus()
     if name == "cnn":
         return NetCNN()
-    if name in ("cnn+", "cnnplus", "netcnnplus"):
+    if name in ("cnn+","cnnplus","netcnnplus"):
         return NetCNNPlus()
-    raise ValueError(f"Unknown model name: {name!r}. Use 'mlp', 'mlp+', 'cnn', or 'cnn+'.")
+    if name in ("cnn++","cnndeep","netcnndeep"):
+        return NetCNNDeep()
+    raise ValueError(f"Unknown model name: {name!r}. Use 'mlp','mlp+','cnn','cnn+','cnn++'.")
 
 
 def count_parameters(model: nn.Module) -> int:
